@@ -117,4 +117,4 @@ Assertion `(unsigned int) p_classes[i] < detectionParams.numClassesConfigured’
 
 # Common Problems
 
-## FOr test1 app -> check updated config file.
+## For test1 app -> check updated config file.
