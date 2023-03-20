@@ -46,3 +46,7 @@ Messages like this indicate that at least one of the detections had a class id l
 ```
 Assertion `(unsigned int) p_classes[i] < detectionParams.numClassesConfigured’ failed.
 ```
+
+# Common Problems
+
+## FOr test1 app -> check updated config file.
