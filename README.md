@@ -22,6 +22,74 @@ This command will create an ONNX model with an [efficientNMS](https://github.com
 
 ## 2. Update the Custom Bounding Box Parser
 
+    extern "C"
+    bool NvDsInferParseCustomEfficientNMS (std::vector<NvDsInferLayerInfo> const &outputLayersInfo,
+                                       NvDsInferNetworkInfo  const &networkInfo,
+                                       NvDsInferParseDetectionParams const &detectionParams,
+                                       std::vector<NvDsInferObjectDetectionInfo> &objectList) {
+        if(outputLayersInfo.size() != 4)
+        {
+            std::cerr << "Mismatch in the number of output buffers."
+                      << "Expected 4 output buffers, detected in the network :"
+                      << outputLayersInfo.size() << std::endl;
+            return false;
+        }
+        const char* log_enable = std::getenv("ENABLE_DEBUG");
+
+        int* p_keep_count = (int *) outputLayersInfo[0].buffer;
+
+        float* p_bboxes = (float *) outputLayersInfo[1].buffer;
+        NvDsInferDims inferDims_p_bboxes = outputLayersInfo[1].inferDims;
+        int numElements_p_bboxes=inferDims_p_bboxes.numElements;
+
+        float* p_scores = (float *) outputLayersInfo[2].buffer;
+        unsigned int* p_classes = (unsigned int *) outputLayersInfo[3].buffer;
+
+        const float threshold = detectionParams.perClassThreshold[0];
+
+        float max_bbox=0;
+        for (int i=0; i < numElements_p_bboxes; i++)
+        {
+            if ( max_bbox < p_bboxes[i] )
+                max_bbox=p_bboxes[i];
+        }
+
+        if (p_keep_count[0] > 0)
+        {
+            assert (!(max_bbox < 2.0));
+            for (int i = 0; i < p_keep_count[0]; i++) {
+
+                if ( p_scores[i] < threshold) continue;
+                assert((unsigned int) p_classes[i] < detectionParams.numClassesConfigured);
+
+                NvDsInferObjectDetectionInfo object;
+                object.classId = (int) p_classes[i];
+                object.detectionConfidence = p_scores[i];
+
+                object.left=p_bboxes[4*i];
+                object.top=p_bboxes[4*i+1];
+                object.width=(p_bboxes[4*i+2] - object.left);
+                object.height= (p_bboxes[4*i+3] - object.top);
+
+                if(log_enable != NULL && std::stoi(log_enable)) {
+                    std::cout << "label/conf/ x/y w/h -- "
+                    << p_classes[i] << " "
+                    << p_scores[i] << " "
+                    << object.left << " " << object.top << " " << object.width << " "<< object.height << " "
+                    << std::endl;
+                }
+
+                object.left=CLIP(object.left, 0, networkInfo.width - 1);
+                object.top=CLIP(object.top, 0, networkInfo.height - 1);
+                object.width=CLIP(object.width, 0, networkInfo.width - 1);
+                object.height=CLIP(object.height, 0, networkInfo.height - 1);
+
+                objectList.push_back(object);
+            }
+        }
+        return true;
+    }
+
 At time of writing, NVIDIA does not support parsing the `efficientNMS` output format into the correct data structure for Deepstream [NvDsObjectMeta](https://docs.nvidia.com/metropolis/deepstream/sdk-api/struct__NvDsObjectMeta.html). 
 
 To be able to map the model outputs from `efficientNMS` to the NVIDIA `NvDsObjectMeta` data structure you need this code has been added in `/opt/nvidia/deepstream/deepstream-6.1/sources/libs/nvdsinfer_customparser/nvdsinfer_custombboxparser.cpp`. A copy of this modified file exists in this repository that you should use to replace the file in that directory.
